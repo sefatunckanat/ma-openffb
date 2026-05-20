@@ -60,3 +60,41 @@ A unified command system supporting different interfaces is available and recomm
 Some parts of this software may contain third party libraries and source code licenced under different terms.
 The license applying to these files is found in the header of the file.
 For all other parts in the `Firmware/FFBoard` folder the LICENSE file applies.
+
+### Local fork changes — **2026-05-20**
+
+The following items are **not** part of upstream OpenFFBoard; they are documented here so you can reproduce or revert them.
+
+#### Custom pin remap (F407VG_DISCO)
+
+The stock DISCO firmware maps the first three digital inputs (`DIN0`–`DIN2`, gamepad buttons D0–D2) to **PC15, PC14, and PC13**. On many boards those pins are tied to the **32 kHz crystal (LSE)** and **RTC** functions, so using them for momentary switches is awkward or impossible.
+
+This fork moves only those three lines to general-purpose pins that are already broken out on the connector as **GP2, GP3, and GP1**. The higher digital inputs **DIN3–DIN7** are unchanged. `LocalButtons` is untouched: it still reads logical `DIN0`…`DIN7` in order; only the STM32 pin macros and `MX_GPIO_Init()` in the DISCO target were updated.
+
+| Logical input | Old STM32 pin | New STM32 pin | Connector label (typical) |
+| --- | --- | --- | --- |
+| DIN0 / D0 | PC15 | **PB4** | GP2 |
+| DIN1 / D1 | PC14 | **PB5** | GP3 |
+| DIN2 / D2 | PC13 | **PD6** | GP1 |
+| DIN3–D7 / D3–D7 | PE6 … PE2 | *(unchanged)* | — |
+
+**Wiring:** digital inputs use internal **pull-up**; connect each button between the DIN (or GP) line and **GND** (normally-open, active low). Do not tie these lines to 5 V.
+
+**Build:** `make MCU_TARGET=F407VG_DISCO` after editing `Firmware/Targets/F407VG_DISCO/Core/Inc/main.h` and `…/Core/Src/main.c`. Re-flash the generated `.hex`. If your hardware matches the official OpenFFBoard 1.2+ pinout instead, use `MCU_TARGET=F407VG`, not DISCO.
+
+#### Axis / encoder position reset (“center here”)
+
+Upstream already labels **PB2** as `BUTTON_A` with EXTI on the rising edge. On some harnesses that line is the same pad as **BOOT1** on the MCU.
+
+This fork additionally polls **PB2** inside `FFBHIDMain::updateControl()` (`FFBHIDMain.cpp`): when the pin goes **inactive → active** (rising edge in software), it sets `control.resetEncoder`, which clears the axis encoder position to zero via `AxesManager::resetPosZero()` (same as “re-center wheel” in software — it does **not** cut motor torque).
+
+| Item | Detail |
+| --- | --- |
+| **Pin** | **PB2** (`BUTTON_A`), DISCO / F407VG `main.h` |
+| **Electrical** | **PB2** must read **low** when released and **high** when pressed. On this DISCO tree `BUTTON_A` is initialized with **`GPIO_NOPULL`** — use a **momentary NO** switch between **3.3 V** and **PB2**, and a **pull-down resistor** (e.g. 10k) from **PB2** to **GND** so the idle level is defined. (Other targets may use internal pull-down in CubeMX.) |
+| **Behaviour** | Each **press** (0 → 1) recenters the logical axis position to 0. |
+| **Not** | This is **not** the emergency stop. E-stop is **PD5** (`E_STOP`), active **low** (switch to GND). |
+| **Boot caution** | If `BTNFAILSAFE` is defined for your target, **holding PB2 high at power-on** can select the failsafe main class. Only use this as a center button while the board is already running. |
+
+**Code:** `Firmware/FFBoard/UserExtensions/Src/FFBHIDMain.cpp` (block guarded by `#ifdef BUTTON_A_Pin`).
+
