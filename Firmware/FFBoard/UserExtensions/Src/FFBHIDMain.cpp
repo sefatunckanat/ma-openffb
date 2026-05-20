@@ -113,13 +113,24 @@ void FFBHIDMain::updateControl(){
 
 #ifdef BUTTON_A_Pin
 	{
-		static bool lastButtonAState = false;
-		const bool buttonAState = HAL_GPIO_ReadPin(BUTTON_A_GPIO_Port, BUTTON_A_Pin) == GPIO_PIN_SET;
+		static bool lastRawState = false;
+		static bool stableState = false;
+		static uint32_t lastChangeTime = 0;
+		constexpr uint32_t DEBOUNCE_MS = 50;
 
-		if(buttonAState && !lastButtonAState){
-			control.resetEncoder = true;
+		const bool rawState = HAL_GPIO_ReadPin(BUTTON_A_GPIO_Port, BUTTON_A_Pin) == GPIO_PIN_SET;
+
+		if(rawState != lastRawState){
+			lastChangeTime = HAL_GetTick();
+			lastRawState = rawState;
 		}
-		lastButtonAState = buttonAState;
+
+		if((HAL_GetTick() - lastChangeTime) > DEBOUNCE_MS){
+			if(rawState && !stableState){
+				control.resetEncoder = true;
+			}
+			stableState = rawState;
+		}
 	}
 #endif
 
@@ -345,9 +356,14 @@ void FFBHIDMain::usbResume(){
 // External interrupt pins
 void FFBHIDMain::exti(uint16_t GPIO_Pin){
 	if(GPIO_Pin == BUTTON_A_Pin){
-		// Button down?
-		if(HAL_GPIO_ReadPin(BUTTON_A_GPIO_Port, BUTTON_A_Pin)){
-			this->control.resetEncoder = true;
+		static uint32_t lastExtiTime = 0;
+		constexpr uint32_t EXTI_DEBOUNCE_MS = 50;
+		const uint32_t now = HAL_GetTick();
+		if((now - lastExtiTime) > EXTI_DEBOUNCE_MS){
+			if(HAL_GPIO_ReadPin(BUTTON_A_GPIO_Port, BUTTON_A_Pin)){
+				this->control.resetEncoder = true;
+			}
+			lastExtiTime = now;
 		}
 	}
 #ifdef E_STOP_Pin
