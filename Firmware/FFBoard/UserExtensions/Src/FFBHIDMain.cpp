@@ -111,6 +111,18 @@ void FFBHIDMain::updateControl(){
 		return;
 	}
 
+#ifdef BUTTON_A_Pin
+	{
+		static bool lastButtonAState = false;
+		const bool buttonAState = HAL_GPIO_ReadPin(BUTTON_A_GPIO_Port, BUTTON_A_Pin) == GPIO_PIN_SET;
+
+		if(buttonAState && !lastButtonAState){
+			control.resetEncoder = true;
+		}
+		lastButtonAState = buttonAState;
+	}
+#endif
+
 	if(control.resetEncoder){
 		control.resetEncoder = false;
 		axes_manager->resetPosZero();

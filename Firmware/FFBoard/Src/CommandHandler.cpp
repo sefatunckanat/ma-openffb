@@ -6,6 +6,7 @@
  */
 
 #include "CommandHandler.h"
+#include <algorithm>
 #include "global_callbacks.h"
 #include "FFBoardMain.h"
 #include "cdc_device.h"

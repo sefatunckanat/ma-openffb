@@ -1188,11 +1188,17 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Pull = GPIO_PULLUP;
   HAL_GPIO_Init(GPIOE, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : DIN2_Pin DIN1_Pin DIN0_Pin */
-  GPIO_InitStruct.Pin = DIN2_Pin|DIN1_Pin|DIN0_Pin;
+  /*Configure GPIO pins : DIN1_Pin DIN0_Pin */
+  GPIO_InitStruct.Pin = DIN1_Pin|DIN0_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
   GPIO_InitStruct.Pull = GPIO_PULLUP;
-  HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
+  HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
+
+  /*Configure GPIO pin : DIN2_Pin */
+  GPIO_InitStruct.Pin = DIN2_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+  GPIO_InitStruct.Pull = GPIO_PULLUP;
+  HAL_GPIO_Init(DIN2_GPIO_Port, &GPIO_InitStruct);
 
   /*Configure GPIO pin : ENCODER_Z_Pin */
   GPIO_InitStruct.Pin = ENCODER_Z_Pin;
@@ -1207,8 +1213,8 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_VERY_HIGH;
   HAL_GPIO_Init(SPI1_SS1_GPIO_Port, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : BUTTON_A_Pin GP2_Pin GP3_Pin */
-  GPIO_InitStruct.Pin = BUTTON_A_Pin|GP2_Pin|GP3_Pin;
+  /*Configure GPIO pin : BUTTON_A_Pin */
+  GPIO_InitStruct.Pin = BUTTON_A_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
@@ -1275,12 +1281,6 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Mode = GPIO_MODE_IT_FALLING;
   GPIO_InitStruct.Pull = GPIO_PULLUP;
   HAL_GPIO_Init(E_STOP_GPIO_Port, &GPIO_InitStruct);
-
-  /*Configure GPIO pin : GP1_Pin */
-  GPIO_InitStruct.Pin = GP1_Pin;
-  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
-  HAL_GPIO_Init(GP1_GPIO_Port, &GPIO_InitStruct);
 
   /* EXTI interrupt init*/
   HAL_NVIC_SetPriority(EXTI2_IRQn, 6, 0);
