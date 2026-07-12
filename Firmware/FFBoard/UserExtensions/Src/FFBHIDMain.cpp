@@ -126,7 +126,7 @@ void FFBHIDMain::updateControl(){
 		}
 
 		if((HAL_GetTick() - lastChangeTime) > DEBOUNCE_MS){
-			if(rawState && !stableState){
+			if(rawState && !stableState){  // rising edge = button pressed (active HIGH)
 				control.resetEncoder = true;
 			}
 			stableState = rawState;
@@ -360,7 +360,7 @@ void FFBHIDMain::exti(uint16_t GPIO_Pin){
 		constexpr uint32_t EXTI_DEBOUNCE_MS = 50;
 		const uint32_t now = HAL_GetTick();
 		if((now - lastExtiTime) > EXTI_DEBOUNCE_MS){
-			if(HAL_GPIO_ReadPin(BUTTON_A_GPIO_Port, BUTTON_A_Pin)){
+			if(HAL_GPIO_ReadPin(BUTTON_A_GPIO_Port, BUTTON_A_Pin)){  // rising edge = button pressed (active HIGH)
 				this->control.resetEncoder = true;
 			}
 			lastExtiTime = now;

@@ -98,3 +98,40 @@ This fork additionally polls **PB2** inside `FFBHIDMain::updateControl()` (`FFBH
 
 **Code:** `Firmware/FFBoard/UserExtensions/Src/FFBHIDMain.cpp` (block guarded by `#ifdef BUTTON_A_Pin`).
 
+#### Digital H-pattern shifter (`dpin.hpattern`) — **2026-07-13**
+
+Mechanical H-gate using **5 digital switches** (forward / reverse / left / right / R paddle). When enabled, those pins are **not** sent raw to Windows; they are decoded into **gear buttons 1–6 + R**. Any other masked D-pins stay raw after the gear buttons.
+
+| Item | Detail |
+| --- | --- |
+| **Default** | **OFF** (`hpattern = 0`) — behaviour identical to stock D-Pins |
+| **Enable** | `dpin.hpattern=1` then `main.savecfg` (persists in flash, `ADR_LOCAL_BTN_CONF_2` bit1) |
+| **Disable** | `dpin.hpattern=0` then `main.savecfg` |
+| **Debug** | `dpin.gear?` → `0`=N, `1`–`6`=gears, `7`=R |
+
+**Pin map** (0-based DIN indices in `LocalButtons.h` — change `PIN_*` if wiring differs):
+
+| DIN | Role |
+| --- | --- |
+| DIN0 | Forward |
+| DIN1 | Reverse / back |
+| DIN2 | Left |
+| DIN3 | Right |
+| DIN4 | R paddle (mandal) |
+| DIN5+ | Unchanged raw buttons when in mask |
+
+**Decode:**
+
+| Switches | HID button |
+| --- | --- |
+| left + forward | 1 |
+| left + reverse | 2 |
+| forward only | 3 |
+| reverse only | 4 |
+| right + forward | 5 |
+| right + reverse | 6 |
+| R + left + forward | 7 (R) |
+| none / invalid | N (no gear bit) |
+
+**Code:** `Firmware/FFBoard/UserExtensions/Inc/LocalButtons.h`, `…/Src/LocalButtons.cpp`.
+
