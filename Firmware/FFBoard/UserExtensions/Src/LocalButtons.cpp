@@ -22,6 +22,8 @@ LocalButtons::LocalButtons() : CommandHandler("dpin",CLSID_BTN_LOCAL,0) {
 	registerCommand("pins", LocalButtons_commands::pins, "Available pins",CMDFLAG_GET | CMDFLAG_SET);
 	registerCommand("values", LocalButtons_commands::values, "pin values",CMDFLAG_GET);
 	registerCommand("pulse", LocalButtons_commands::pulse, "Toggle to pulse mode mask",CMDFLAG_GET | CMDFLAG_SET);
+	registerCommand("hpattern", LocalButtons_commands::hpattern, "H-pattern shifter mode (1-6+R)",CMDFLAG_GET | CMDFLAG_SET);
+	registerCommand("gear", LocalButtons_commands::gear, "Decoded H-pattern gear (0=N,7=R)",CMDFLAG_GET);
 }
 
 LocalButtons::~LocalButtons() {
@@ -32,14 +34,73 @@ const ClassIdentifier LocalButtons::getInfo(){
 	return info;
 }
 
+void LocalButtons::updateBtnNum(){
+	this->btnnum = 0;
+	if(hpattern){
+		// 5 H-switches → 7 gear buttons (1-6+R); remaining masked pins stay raw
+		this->btnnum = HPATTERN_BTN_COUNT;
+	}
+	for(uint8_t i = 0;i<this->maxButtons;i++){
+		if(!(mask & (1 << i))){
+			continue;
+		}
+		if(hpattern && isHPatternPin(i)){
+			continue; // consumed by gear decode, not sent raw
+		}
+		this->btnnum++;
+	}
+}
+
 void LocalButtons::setMask(uint32_t mask){
 	this->mask = mask;
+	updateBtnNum();
+}
 
-	this->btnnum = 0;
-	for(uint8_t i = 0;i<this->maxButtons;i++){
-		if(mask & (1 << i)){
-			this->btnnum++;
-		}
+bool LocalButtons::isPinActive(uint8_t pin) const {
+	if(pin >= maxButtons){
+		return false;
+	}
+	bool raw = readButton(pin);
+	// polarity false (default): active low (pull-up, switch to GND)
+	return polarity ? raw : !raw;
+}
+
+/**
+ * Digital H-pattern decode:
+ *   left+fwd       = 1
+ *   left+rev       = 2
+ *   fwd only       = 3
+ *   rev only       = 4
+ *   right+fwd      = 5
+ *   right+rev      = 6
+ *   R + left+fwd   = R (7)
+ *   none           = N (0)
+ */
+void LocalButtons::calculateHPatternGear(){
+	const bool fwd = isPinActive(PIN_FWD);
+	const bool rev = isPinActive(PIN_REV);
+	const bool left = isPinActive(PIN_LEFT);
+	const bool right = isPinActive(PIN_RIGHT);
+	const bool rsw = isPinActive(PIN_R);
+
+	gear = 0;
+
+	if(left && right){
+		return; // invalid gate position
+	}
+
+	if(left && fwd){
+		gear = rsw ? 7 : 1;
+	}else if(left && rev){
+		gear = 2;
+	}else if(right && fwd){
+		gear = 5;
+	}else if(right && rev){
+		gear = 6;
+	}else if(fwd){
+		gear = 3;
+	}else if(rev){
+		gear = 4;
 	}
 }
 
@@ -58,7 +119,35 @@ uint8_t LocalButtons::getButtonInputs(uint64_t* buf,bool pol){
 	return this->btnnum;
 }
 
+/**
+ * Raw buttons for masked pins that are NOT part of the 5 H-pattern switches.
+ */
+uint8_t LocalButtons::readExtraPinButtons(uint64_t* buf){
+	uint8_t cur_btn = 0;
+	for(uint8_t i = 0;i<this->maxButtons;i++){
+		if(!(mask & (0x1 << i))){
+			continue;
+		}
+		if(isHPatternPin(i)){
+			continue;
+		}
+		*buf |= (uint64_t)(isPinActive(i) ? 1 : 0) << cur_btn++;
+	}
+	return cur_btn;
+}
+
 uint8_t LocalButtons::readButtons(uint64_t* buf){
+
+	if(hpattern){
+		calculateHPatternGear();
+		if(gear > 0){
+			*buf |= (uint64_t)1 << (gear - 1);
+		}
+		uint64_t extra = 0;
+		readExtraPinButtons(&extra);
+		*buf |= extra << HPATTERN_BTN_COUNT;
+		return this->btnnum;
+	}
 
 	uint64_t tBuf = 0;
 	getButtonInputs(&tBuf,this->polarity);
@@ -87,7 +176,9 @@ void LocalButtons::saveFlash(){
 	uint16_t dat = this->mask & 0xffff;
 	Flash_Write(ADR_LOCAL_BTN_CONF, dat);
 
-	uint16_t dat2 = this->polarity & 0x01;
+	uint16_t dat2 = 0;
+	dat2 |= (this->polarity & 0x01);
+	dat2 |= (this->hpattern ? 0x02 : 0); // bit1 = H-pattern mode
 	Flash_Write(ADR_LOCAL_BTN_CONF_2, dat2);
 
 	uint16_t dat3 = this->pulsemask & 0xffff;
@@ -102,6 +193,8 @@ void LocalButtons::restoreFlash(){
 
 	if(Flash_Read(ADR_LOCAL_BTN_CONF_2,&dat)){
 		this->polarity = dat & 0x01;
+		this->hpattern = (dat & 0x02) != 0;
+		updateBtnNum();
 	}
 
 	if(Flash_Read(ADR_LOCAL_BTN_CONF_3,&dat)){
@@ -155,6 +248,28 @@ CommandStatus LocalButtons::command(const ParsedCommand& cmd,std::vector<Command
 			this->pulsemask = cmd.val;
 		}else if(cmd.type == CMDtype::get){
 			replies.emplace_back(this->pulsemask);
+		}else{
+			return CommandStatus::ERR;
+		}
+	break;
+
+	case LocalButtons_commands::hpattern:
+		if(cmd.type == CMDtype::set){
+			this->hpattern = cmd.val != 0;
+			updateBtnNum();
+		}else if(cmd.type == CMDtype::get){
+			replies.emplace_back(this->hpattern ? 1 : 0);
+		}else{
+			return CommandStatus::ERR;
+		}
+	break;
+
+	case LocalButtons_commands::gear:
+		if(cmd.type == CMDtype::get){
+			if(hpattern){
+				calculateHPatternGear();
+			}
+			replies.emplace_back(gear);
 		}else{
 			return CommandStatus::ERR;
 		}
